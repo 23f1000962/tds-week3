@@ -88,59 +88,91 @@ async def root():
     return {"ok": True, "email": config.EMAIL}
 # ================= Q2: /answer-image =================
 def normalize_answer(ans):
-    """Clean a vision answer so it matches the grader's expected string.
-    Numeric answers: strip currency/commas/units, keep the bare number.
-    Text answers (e.g. a category name): keep as-is, trimmed."""
     s = str(ans).strip()
-    if not s:
-        return s
-    # If it looks numeric once symbols/commas/spaces are removed, return the number.
-    cleaned = re.sub(r"[,\s]", "", s)
-    cleaned = re.sub(r"[₹$€£%]", "", cleaned)
-    m = re.search(r"-?\d+(?:\.\d+)?", cleaned)
-    if m and re.fullmatch(r"[^\dA-Za-z]*-?\d[\d,.\s₹$€£%]*", s.strip()):
-        num = m.group(0)
-        # drop trailing ".0" so 240.0 -> 240 (matches integer-style expected values)
-        if "." in num:
-            num = num.rstrip("0").rstrip(".")
-        return num
-    return s
 
+    if not s:
+        return ""
+
+    # Remove markdown quotes
+    s = s.strip('"').strip("'")
+
+    # Numeric answers
+    numeric = s.replace(",", "")
+    numeric = numeric.replace("₹", "")
+    numeric = numeric.replace("$", "")
+    numeric = numeric.replace("€", "")
+    numeric = numeric.replace("£", "")
+
+    if re.fullmatch(r"-?\d+(\.\d+)?", numeric):
+        if "." in numeric:
+            numeric = numeric.rstrip("0").rstrip(".")
+        return numeric
+
+    return s
 @app.post("/answer-image")
 async def answer_image(request: Request):
     body = await request.json()
     img_b64 = body.get("image_base64", "")
     question = body.get("question", "")
     messages = [{
-        "role": "user",
-        "content": [
-            {"type": "text", "text":
-                "You read charts, receipts, tables, invoices and pie charts EXACTLY.\n"
-                "Work in steps in a 'work' field, then give the final 'answer':\n"
-                "1. TRANSCRIBE every relevant label and number you see, one by one "
-                "(e.g. each bar's value, each receipt line, each table cell). Read "
-                "digits carefully; do not round or estimate.\n"
-                "2. If the question needs arithmetic (sum of all bars, grand total, "
-                "max/min of a column, total including tax), compute it step by step "
-                "and DOUBLE-CHECK the sum by re-adding.\n"
-                "3. Final 'answer': if NUMERIC, output ONLY the bare number — no "
-                "currency symbol, no thousands separators, no units, no words. Keep "
-                "decimals exactly as shown (e.g. a money total 4089.35 stays 4089.35). "
-                "If TEXT (e.g. the largest pie category), output it EXACTLY as written "
-                "in the image.\n"
-                "Return JSON: {\"work\": \"...\", \"answer\": \"...\"}.\n"
-                f"Question: {question}"},
-            {"type": "image_url",
-             "image_url": {"url": f"data:image/png;base64,{img_b64}", "detail": "high"}},
-        ],
-    }]
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"""
+        You are an OCR and document understanding assistant.
+        
+        Answer the question ONLY using the image.
+        
+        Rules:
+        - Return ONLY valid JSON.
+        - Format exactly:
+        {{"answer":"..."}}
+        
+        If the answer is numeric:
+        - Return only the number.
+        - No commas.
+        - No currency symbols.
+        - No units.
+        - Preserve decimals exactly.
+        
+        If the answer is text:
+        - Return the exact text appearing in the image.
+        
+        Question:
+        {question}
+        """
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{img_b64}",
+                        "detail": "high"
+                    }
+                }
+            ]
+        }]
     try:
         # Full gpt-4o at high image detail reads small chart/receipt labels accurately.
-        out = parse_json(await chat(messages, model=config.VISION_MODEL, max_tokens=1200))
-        ans = normalize_answer(out.get("answer", ""))
+        raw = await chat(
+            messages,
+            model=config.VISION_MODEL,
+            max_tokens=500
+        )
+    
+        print("RAW MODEL OUTPUT:", raw)
+    
+        try:
+            out = json.loads(raw)
+            ans = out.get("answer", "")
+        except Exception:
+            ans = raw.strip()
+    
+        ans = normalize_answer(ans)
+    
     except Exception as e:
+        print("Q2 ERROR:", str(e))
         ans = ""
-    return {"answer": str(ans)}
 # ================= Q3 + Q7: /extract =================
 @app.post("/extract")
 async def extract(request: Request):
