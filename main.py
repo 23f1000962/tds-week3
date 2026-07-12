@@ -513,8 +513,7 @@ async def answer_audio(request: Request):
                 clean_stats[stat_name] = values
             else:
                 clean_stats[stat_name] = values
-
-explicit_stats = clean_stats
+        explicit_stats = clean_stats
     except Exception:
         pass
 
