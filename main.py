@@ -543,6 +543,7 @@ async def answer_audio(request: Request):
     for sd in (explicit_stats or {}).values():
         if isinstance(sd, dict):
             for k in sd:
+                k = re.sub(r"\s+", "", k).strip()
                 if k not in referenced:
                     referenced.append(k)
     for c in referenced:
@@ -552,6 +553,7 @@ async def answer_audio(request: Request):
     if not req_stats:
         req_stats = ["mean", "std", "variance", "min", "max", "median", "mode", "range", "allowed_values", "value_range", "correlation"]
 
+    columns = list(dict.fromkeys(columns))
     actual_rows = num_rows if num_rows is not None else len(data_rows)
     out = {"rows": actual_rows, "columns": columns,
            "mean": {}, "std": {}, "variance": {}, "min": {}, "max": {},
