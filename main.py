@@ -153,7 +153,6 @@ async def answer_image(request: Request):
             ]
         }]
     try:
-        # Full gpt-4o at high image detail reads small chart/receipt labels accurately.
         raw = await chat(
             messages,
             model=config.VISION_MODEL,
@@ -173,6 +172,11 @@ async def answer_image(request: Request):
     except Exception as e:
         print("Q2 ERROR:", str(e))
         ans = ""
+    
+    print("QUESTION:", question)
+    print("FINAL ANSWER:", ans)
+    
+    return {"answer": str(ans)}
 # ================= Q3 + Q7: /extract =================
 @app.post("/extract")
 async def extract(request: Request):
