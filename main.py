@@ -489,6 +489,14 @@ async def answer_audio(request: Request):
         last_debug_info["raw_llm"] = raw_llm
         ext = parse_json(raw_llm)
         columns = ext.get("columns", []) or []
+        import re
+
+        columns = [
+            re.sub(r"\s+", "", c).strip()
+            if isinstance(c, str)
+            else c
+            for c in columns
+        ]
         data_rows = ext.get("data_rows", []) or []
         req_stats = ext.get("requested_stats", [])
         num_rows = ext.get("num_rows")
