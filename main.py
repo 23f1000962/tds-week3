@@ -501,6 +501,20 @@ async def answer_audio(request: Request):
         req_stats = ext.get("requested_stats", [])
         num_rows = ext.get("num_rows")
         explicit_stats = ext.get("explicit_stats", {})
+        clean_stats = {}
+
+        for stat_name, values in explicit_stats.items():
+            if isinstance(values, dict):
+                clean_stats[stat_name] = {
+                    re.sub(r"\s+", "", str(k)).strip(): v
+                    for k, v in values.items()
+                }
+            elif isinstance(values, list):
+                clean_stats[stat_name] = values
+            else:
+                clean_stats[stat_name] = values
+
+explicit_stats = clean_stats
     except Exception:
         pass
 
@@ -606,13 +620,20 @@ async def answer_audio(request: Request):
     if isinstance(raw_corr, list):
         for item in raw_corr:
             if isinstance(item, dict) and item.get("x") and item.get("y"):
-                corr_list.append({"x": item["x"], "y": item["y"],
-                                  "type": _corr_type(transcript, item.get("type", ""))})
+                corr_list.append({
+                                    "x": re.sub(r"\s+", "", item["x"]).strip(),
+                                    "y": re.sub(r"\s+", "", item["y"]).strip(),
+                                    "type": _corr_type(transcript, item.get("type", ""))
+                                })
     elif isinstance(raw_corr, dict):
         # model collapsed it to {x: y} and dropped the type -> rebuild, infer sign from audio
         for x, y in raw_corr.items():
             if isinstance(y, str) and y:
-                corr_list.append({"x": x, "y": y, "type": _corr_type(transcript)})
+                corr_list.append({
+                                    "x": re.sub(r"\s+", "", x).strip(),
+                                    "y": re.sub(r"\s+", "", y).strip(),
+                                    "type": _corr_type(transcript)
+                                })
     if not corr_list and cols_vals and len(columns) > 1 and all(cols_vals) and "correlation" in req_stats:
         # Data present but no explicit statement: derive sign of Pearson r per column pair.
         import math
@@ -673,9 +694,15 @@ async def answer_audio(request: Request):
 
     # Merge every explicit stat into the output.
     for stat_name, stat_dict in explicit_stats.items():
-        if stat_name in out and isinstance(out[stat_name], dict) and isinstance(stat_dict, dict):
-            out[stat_name].update(stat_dict)
-
+        if (
+            stat_name in out
+            and isinstance(out[stat_name], dict)
+            and isinstance(stat_dict, dict)
+        ):
+            out[stat_name].update({
+                re.sub(r"\s+", "", str(k)).strip(): v
+                for k, v in stat_dict.items()
+            })
     # Trim to EXACTLY the target key set so the grader's key-set check passes both
     # ways — no missing keys, no leaked siblings.
     for k in FULL:
